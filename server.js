@@ -45,10 +45,41 @@ app.post("/api/urls", (req, res) => {
     });
   }
 
-  const shortCode = generateCode();
-  db.prepare(
-  "INSERT INTO urls (short_code, original_url) VALUES (?, ?)"
-  ).run(shortCode, parsedUrl.href);
+
+
+
+
+
+
+let shortCode;
+let saved = false;
+
+for (let attempt = 1; attempt <= 5; attempt++) {
+  shortCode = generateCode();
+
+  try {
+    db.prepare(
+      "INSERT INTO urls (short_code, original_url) VALUES (?, ?)"
+    ).run(shortCode, parsedUrl.href);
+
+    saved = true;
+    break;
+  } catch (error) {
+    if (!error.message.includes("UNIQUE")) {
+      throw error;
+    }
+  }
+}
+
+if (!saved) {
+  return res.status(500).json({
+    error: "Could not generate a unique short code"
+  });
+}
+
+
+
+
 
   res.status(201).json({
     shortCode,
@@ -59,6 +90,11 @@ app.post("/api/urls", (req, res) => {
 
 
 
+
+
+app.get("/test-error", (req, res) => {
+  throw new Error("This is a test database failure");
+});
 
 
 app.get("/:shortCode", (req, res) => {
@@ -72,12 +108,26 @@ app.get("/:shortCode", (req, res) => {
     return res.status(404).send("Short URL not found");
   }
 
+  db.prepare(
+    "UPDATE urls SET clicks = clicks + 1 WHERE short_code = ?"
+  ).run(shortCode);
+
   res.redirect(row.original_url);
 });
 
 
 
 
+
+
+
+app.use((err, req, res, next) => {
+  console.error(err);
+
+  res.status(500).json({
+    error: "Internal server error"
+  });
+});
 
 
 
